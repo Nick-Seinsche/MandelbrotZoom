@@ -1,19 +1,31 @@
 src = """
 
-build {
+build90 {
+    g++ "mandelbrot.c" "res/resource.o"
+    -o "mandelbrot90"
+    -I "SDL2-2.0.9/i686-w64-mingw32/include"
+    -L "SDL2-2.0.9/i686-w64-mingw32/lib"
+    -lSDL2main
+    -lSDL2
+    -Wall
+    -pg
+    -O
+    -Wl,--subsystem,windows
+    -w
+}
+
+build45 {
     g++ "mandelbrot.c" "res/resource.o"
     -o "mandelbrot45"
     -I "SDL2-2.0.9/i686-w64-mingw32/include"
     -L "SDL2-2.0.9/i686-w64-mingw32/lib"
     -lSDL2main
     -lSDL2
-    -L mingw32
     -Wall
     -pg
     -O
     -Wl,--subsystem,windows
     -w
-    -mwindows
 }
 """
 """
