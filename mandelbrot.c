@@ -4,11 +4,14 @@
 #include <math.h>
 #include <sys/time.h>
 
+
 #define CPX_USE_LONG_DOUBLE
 #include "complex.h"
 
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
+
+#include "SDL2/SDL_thread.h"
 
 #define WINDOW_WIDTH 500
 #define WINDOW_HEIGHT 400
@@ -26,6 +29,11 @@ struct Camera{
 typedef struct Point{
     long double x, y;
 } POINT;
+
+
+typedef struct PixelColor{
+    unsigned char r, g, b;
+} PIXEL_COLOR;
 
 /*
     Calculates the viewport of a given Camera. Returns two sets of points:
@@ -107,17 +115,71 @@ double map(long double v, long double a, long double b, long double c,
 /*
     Calculate the pixels for the mandelbrot set
 */
-void update2(SDL_Renderer* renderer, POINT real, POINT imag,
-                                        float var1, float var2, float var3){
-    double r, g, b;
+// void update2(SDL_Renderer* renderer, POINT real, POINT imag,
+//                                         float var1, float var2, float var3){
+//     double r, g, b;
+//     complex c, z;
+//     int k;
+//     //#pragma omp parallel for
+//     for (int i = 0 ; i < WINDOW_WIDTH ; ++i){
+//         for (int j = 0 ; j < WINDOW_HEIGHT ; ++j){
+//             //complex c = {(double) i / exp(zoom) - x_offset, (double) j / exp(zoom) - y_offset};
+//             c = (complex) {map(i, 0, WINDOW_WIDTH, real.x, real.y),
+//                           map(j, 0, WINDOW_HEIGHT, imag.x, imag.y)};
+//             z = (complex) {0, 0};
+//             k = 0;
+//             while (k <= MAX_ITER){
+//                 z = cpx_add(cpx_mul(z, z), c);
+//                 if (z.real + z.imag > 17 || z.real + z.imag < -17) break;
+//                 k += 1;
+//             }
+//             k = (int)((double) k / MAX_ITER * 255) % 255;
+//             r = (int)(cos(k) * k + (long double) var1 * k) % 255;
+//             g = (int)(sin(k * k) * k + (long double) var2 * k) % 255;
+//             b = (int)(k * (long double) var3 + sin(k) * k / MAX_ITER) % 255;
+//
+//             SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+//             SDL_RenderDrawPoint(renderer, i, j);
+//         }
+//     }
+// }
+
+void write(uint8_t* ptr, uint8_t r, uint8_t g, uint8_t b){
+    *ptr = r;
+    ptr ++;
+    *ptr = g;
+    ptr ++;
+    *ptr = b;
+    ptr ++;
+}
+
+// typedef struct ThreadData{
+//     uint8_t* ptr;
+//     uint8_t r, g, b;
+// } THREAD_DATA;
+//
+// static int write(THREAD_DATA* td){
+//     *(td -> ptr) = td -> r;
+//     td -> ptr ++;
+//     *(td -> ptr) = td -> g;
+//     td -> ptr ++;
+//     *(td -> ptr) = td -> b;
+//     td -> ptr ++;
+//     return 0;
+//
+// }
+
+void update3(uint8_t* pixels, POINT viewport[2], float vars[3]){
+    int r, g, b;
     complex c, z;
     int k;
-    //#pragma omp parallel for
-    for (int i = 0 ; i < WINDOW_WIDTH ; ++i){
-        for (int j = 0 ; j < WINDOW_HEIGHT ; ++j){
-            //complex c = {(double) i / exp(zoom) - x_offset, (double) j / exp(zoom) - y_offset};
-            c = (complex) {map(i, 0, WINDOW_WIDTH, real.x, real.y),
-                          map(j, 0, WINDOW_HEIGHT, imag.x, imag.y)};
+    //SDL_Thread* thread;
+    //int currentIndex = 0;
+
+    for (int j = 0 ; j < WINDOW_HEIGHT ; ++j){
+        for (int i = 0 ; i < WINDOW_WIDTH; ++i){
+            c = (complex) {map(i, 0, WINDOW_WIDTH, viewport[0].x, viewport[0].y),
+                          map(j, 0, WINDOW_HEIGHT, viewport[1].x, viewport[1].y)};
             z = (complex) {0, 0};
             k = 0;
             while (k <= MAX_ITER){
@@ -126,12 +188,17 @@ void update2(SDL_Renderer* renderer, POINT real, POINT imag,
                 k += 1;
             }
             k = (int)((double) k / MAX_ITER * 255) % 255;
-            r = (int)(cos(k) * k + (long double) var1 * k) % 255;
-            g = (int)(sin(k * k) * k + (long double) var2 * k) % 255;
-            b = (int)(k * (long double) var3 + sin(k) * k / MAX_ITER) % 255;
+            r = (int)(cos(k) * k + (long double) vars[0] * k) % 255;
 
-            SDL_SetRenderDrawColor(renderer, r, g, b, 255);
-            SDL_RenderDrawPoint(renderer, i, j);
+            g = (int)(sin(k * k) * k + (long double) vars[1] * k) % 255;
+
+            b = (int)(k * (long double) vars[2] + sin(k) * k / MAX_ITER) % 255;
+
+            *pixels++ = r;
+            *pixels++ = g;
+            *pixels++ = b;
+            //THREAD_DATA td = {pixels, (uint8_t) r, (uint8_t) g, (uint8_t) b};
+            //thread = SDL_CreateThread(write, "thread", &td);
         }
     }
 }
@@ -152,19 +219,27 @@ int main(){
     struct Camera camera = {0.0, 0.0, 0.33};
     POINT points[2];
     calculatePerspective(&camera, points);
+
     srand(time(0));
-    float var1 = (float)(rand() % 250) / 100.0 + 0.5;
-    float var2 = (float)(rand() % 300) / 100.0 + 0.1 + var1 / 5.0;
-    float var3 = (float)(rand() % 200) / 100.0 + 0.2;
+    float vars[3];
+    vars[0] = (float)(rand() % 200) / 100.0 + 0.3;
+    vars[1] = (float)(rand() % 200) / 100.0 + 0.5;
+    vars[2] = (float)(rand() % 200) / 100.0 + 0.5;
 
-    printf("%f, %f, %f\n", var1, var2, var3);
+    SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24,
+                    SDL_TEXTUREACCESS_STREAMING, WINDOW_WIDTH, WINDOW_HEIGHT);
 
-    SDL_RenderClear(renderer);
-    update2(renderer, points[0], points[1], var1, var2, var3);
-    SDL_RenderPresent(renderer);
+    uint8_t *pixels = (uint8_t*) malloc(WINDOW_WIDTH * WINDOW_HEIGHT
+                                                * sizeof(uint8_t) * 3);
+    int pitch = sizeof(uint8_t) * 3 * WINDOW_WIDTH;
 
-    // Window loop
-    bool running = true;
+    // for (unsigned int i = 0 ; i < WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint8_t) * 3; i++){
+    //     pixels[i] = 0;
+    // }
+
+    //SDL_RenderClear(renderer);
+    //update2(renderer, points[0], points[1], var1, var2, var3);
+    //SDL_RenderPresent(renderer);
 
     float defaultZoom = points[0].y - points[0].x;
     float zoomLevel = defaultZoom;
@@ -174,7 +249,24 @@ int main(){
     unsigned short frames = 0;
     unsigned short fps = 0;
 
+    // start = clock();
+    // update3(pixels, points, vars);
+    // stop = clock();
+    // delta += stop - start;
+    // printf("delta: %f\n", (double) delta);
+    //
+    // start = clock();
+    // update2(renderer, points[0], points[1], vars[0], vars[1], vars[2]);
+    // stop = clock();
+    // delta += stop - start;
+    // printf("delta: %f\n", (double) delta);
+    //
+    // return 0;
+
     updateTitle(window, camera, zm, frames);
+
+    // Window loop
+    bool running = true;
 
     while(running){
 
@@ -190,12 +282,16 @@ int main(){
                 running = false;
             }
         }
-        //#pragma omp parallel
-        //{
-            SDL_RenderClear(renderer);
-            update2(renderer, points[0], points[1], var1, var2, var3);
-            SDL_RenderPresent(renderer);
-        //}
+        update3(pixels, points, vars);
+        SDL_UpdateTexture(texture, NULL, pixels, pitch);
+        SDL_RenderCopy(renderer, texture, NULL, NULL );
+        SDL_RenderPresent(renderer);
+
+        //SDL_RenderClear(renderer);
+        //update2(renderer, points[0], points[1], var1, var2, var3);
+        //SDL_RenderPresent(renderer);
+
+
         stop = clock();
         delta += stop - start;
         frames ++;
@@ -206,5 +302,8 @@ int main(){
         }
         updateTitle(window, camera, zm, fps);
     }
+
+    SDL_DestroyRenderer(renderer);
+    SDL_Quit();
     return 0;
 }

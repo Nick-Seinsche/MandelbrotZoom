@@ -12,6 +12,7 @@ build90 {
     -O
     -Wl,--subsystem,windows
     -w
+    -mwindows
 }
 
 build45 {
@@ -31,9 +32,7 @@ build45 {
 """
 
 whatever {
-    -Wl,--subsystem,windows
-    -w
-    -mwindows
+
     -fopenmp
     -lmingw32
     -lSDL2main
