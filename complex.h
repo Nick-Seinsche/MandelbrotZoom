@@ -11,7 +11,7 @@
 
     typedef         cpx_VALUE
 
-    typedef struct  complex                 {real: cpx_VALUE, imag: cpx_VALUE} 
+    typedef struct  complex                 {real: cpx_VALUE, imag: cpx_VALUE}
 
     ~~ GLOBAL VARIABLES ~~
 
@@ -48,8 +48,8 @@
     ==========================================================================
 
     Determines the datatype of real and imag part of complex type.
-    If defined in your project the complex datatype will use the 
-    given type to store the real and imaginary part of complex type 
+    If defined in your project the complex datatype will use the
+    given type to store the real and imaginary part of complex type
     else float will be used as default.
 
     sizeof(complex) = 8 for float
@@ -59,7 +59,7 @@
     #define CPX_USE_FLOAT
     #define CPX_USE_DOUBLE
     #define CPX_USE_LONG_DOUBLE
-    #define CPX_NO_DEFINE
+    #define CPX_NO_VALUE_DEFINE
 
     Use CPX_NO_VALUE_DEFINE if you want to define cpx_VALUE to a custom type.
 */
@@ -195,7 +195,7 @@ void cpx_cpy(complex* a, complex b){
 
 /*
     Returns a string that represents given complex a in the form of a+ib,
-    where a,b are floats.    
+    where a,b are floats.
 */
 char* cpx_str(complex a){
     sprintf(cpx_STRING, "%f+%fi", (float) a.real, (float) a.imag);

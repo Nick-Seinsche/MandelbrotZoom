@@ -1,0 +1,9 @@
+__kernel void add(__global float* x, __global float* y, __global float* z,
+                    uint32_t len)
+{
+    size_t idx = get_global_id(0);
+    if (idx >= len){
+        return;
+    }
+    z[idx] = x[idx] + y[idx]
+}

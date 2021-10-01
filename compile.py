@@ -3,8 +3,8 @@ src = """
 build90 {
     g++ "mandelbrot.c" "res/resource.o"
     -o "mandelbrot90"
-    -I "SDL2-2.0.9/i686-w64-mingw32/include"
-    -L "SDL2-2.0.9/i686-w64-mingw32/lib"
+    -I "SDL2-2.0.9/x86_64-w64-mingw32/include"
+    -L "SDL2-2.0.9/x86_64-w64-mingw32/lib"
     -lSDL2main
     -lSDL2
     -Wall
@@ -18,8 +18,8 @@ build90 {
 build45 {
     g++ "mandelbrot.c" "res/resource.o"
     -o "mandelbrot45"
-    -I "SDL2-2.0.9/i686-w64-mingw32/include"
-    -L "SDL2-2.0.9/i686-w64-mingw32/lib"
+    -I "SDL2-2.0.9/x86_64-w64-mingw32/include"
+    -L "SDL2-2.0.9/x86_64-w64-mingw32/lib"
     -lSDL2main
     -lSDL2
     -Wall
@@ -28,11 +28,21 @@ build45 {
     -Wl,--subsystem,windows
     -w
 }
+build {
+    g++ "mandelbrot.c" "res/resource.o"
+    -o "mandelbrot"
+    -I "SDL2-2.0.9/x86_64-w64-mingw32/include"
+    -L "SDL2-2.0.9/x86_64-w64-mingw32/lib"
+    -lSDL2main
+    -lSDL2
+    -Wall
+    -pg
+    -O
+}
 """
 """
 
 whatever {
-
     -fopenmp
     -lmingw32
     -lSDL2main
@@ -43,7 +53,7 @@ whatever {
     -I "C:/OCL_SDK_Light/include"
     -L "C:/OCL_SDK_Light/lib"
     "C:/OCL_SDK_Light/lib/x86/opencl.lib"
-
+}
 """
 
 import sys

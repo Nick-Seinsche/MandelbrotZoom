@@ -1,9 +1,9 @@
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <math.h>
 #include <sys/time.h>
-
 
 #define CPX_USE_LONG_DOUBLE
 #include "complex.h"
@@ -11,42 +11,117 @@
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 
-#include "SDL2/SDL_thread.h"
+//#include "SDL2/SDL_thread.h"
 
-#define WINDOW_WIDTH 500
-#define WINDOW_HEIGHT 400
+// ---------------------------------------------------------------------------
+
+#define WINDOW_WIDTH 800
+#define WINDOW_HEIGHT 600
+#define FULLSCREEN 0
 
 // SETS the depth of the fractal; Change as you like.
-#define MAX_ITER 45
+#define MAX_ITER 90
 
+// Sets the threshhold after which the mandelbrot iteration is considered
+// bounded.
+// The black region will always be a superset of the mandelbrot set.
+// The are equal if MAX_ITER tends to infinity and BOUNDED_THRESHOLD = 2.
+#define BOUNDED_THRESHOLD 2
 
+// 1 - Use Conrol points
+// 2 - Use continous coloring
+// 3 - Black and White
+#define COLORING 1
+
+// ---------------------------------------------------------------------------
+
+// posX, posY center of the viewport, zoom is the zoom level
+// the camera is used to update the viewport
 struct Camera{
     long double posX, posY;
     long double zoom;
 };
 
-
 typedef struct Point{
     long double x, y;
 } POINT;
 
-
 typedef struct PixelColor{
-    unsigned char r, g, b;
+    uint8_t r, g, b;
 } PIXEL_COLOR;
 
+
+#if COLORING == 1
+
+// control point colors
+struct PixelColor color1 = {0, 7, 100};
+
+float position1 = 0.16;
+struct PixelColor color2 = {32, 107, 203};
+
+float position2 = 0.42;
+float delta2 = position2 - position1;
+struct PixelColor color3 = {237, 255, 255};
+
+float position3 = 0.6425;
+float delta3 = position3 - position2;
+struct PixelColor color4 = {255, 170, 0};
+
+float position4 = 0.8575;
+float delta4 = position4 - position3;
+struct PixelColor color5 = {0, 2, 0};
+
+struct PixelColor color6 = {0, 0, 0};
+
+
+void calulateColorWithControlPoints(uint8_t* r, uint8_t* g,
+                                    uint8_t* b, int k) {
+    // low t - not in the mandelbrot set (if BOUNDED_THRESHOLD = 2)
+    // high t - probably inside the mandelbrot set
+
+    float t = (float) k / MAX_ITER;
+    if (t <= position1){
+        float l = t / position1;
+        *r = (1 - l) * color1.r + l * color2.r;
+        *g = (1 - l) * color1.g + l * color2.g;
+        *b = (1 - l) * color1.b + l * color2.b;
+    }else if (t <= position2) {
+        float l = (t - position1) / delta2;
+        *r = (1 - l) * color2.r + l * color3.r;
+        *g = (1 - l) * color2.g + l * color3.g;
+        *b = (1 - l) * color2.b + l * color3.b;
+    }else if (t <= position3) {
+        float l = (t - position2) / delta3;
+        *r = (1 - l) * color3.r + l * color4.r;
+        *g = (1 - l) * color3.g + l * color4.g;
+        *b = (1 - l) * color3.b + l * color4.b;
+    }else if (t <= position4) {
+        float l = (t - position3) / delta4;
+        *r = (1 - l) * color4.r + l * color5.r;
+        *g = (1 - l) * color4.g + l * color5.g;
+        *b = (1 - l) * color4.b + l * color5.b;
+    }else {
+        *r = color6.r;
+        *g = color6.g;
+        *b = color6.b;
+    }
+}
+
+#endif
+
+
 /*
-    Calculates the viewport of a given Camera. Returns two sets of points:
+    Calculates the viewport of a given Camera. Calcs two sets of points:
     [x_min, x_max] and [y_min, y_max]. Any given point inside of the intervals
     will be part of the viewport.
 */
-void calculatePerspective(struct Camera* c, POINT points[2]){
-     points[0].x = c -> posX - 1.0 / (exp(c -> zoom) - 1.0);
-     points[0].y = c -> posX + 1.0 / (exp(c -> zoom) - 1.0);
-     points[1].x = (c -> posY - 1.0 / (exp(c -> zoom) - 1.0) *
-                    (long double) WINDOW_HEIGHT / WINDOW_WIDTH);
-     points[1].y = (c -> posY + 1.0 / (exp(c -> zoom) - 1) *
-                    (long double) WINDOW_HEIGHT / WINDOW_WIDTH);
+void calculatePerspective(struct Camera* c, POINT viewport[2]){
+     viewport[0].x = c -> posX - 1.0 / (exp(c -> zoom) - 1.0);
+     viewport[0].y = c -> posX + 1.0 / (exp(c -> zoom) - 1.0);
+     viewport[1].x = (c -> posY - 1.0 / (exp(c -> zoom) - 1.0) *
+                        (long double) WINDOW_HEIGHT / WINDOW_WIDTH);
+     viewport[1].y = (c -> posY + 1.0 / (exp(c -> zoom) - 1) *
+                        (long double) WINDOW_HEIGHT / WINDOW_WIDTH);
 }
 
 /*
@@ -79,6 +154,7 @@ void handleKeys(SDL_KeyboardEvent* event, struct Camera* c){
             break;
         case SDLK_q:
             c -> zoom += 0.2;
+            printf("zoom: %f\n", (float) c -> zoom);
             break;
         case SDLK_e:
             c -> zoom -= 0.2;
@@ -87,6 +163,40 @@ void handleKeys(SDL_KeyboardEvent* event, struct Camera* c){
     }
 }
 
+
+/*
+    displays integer with
+    k - 1000
+    kk - 100k
+    m - million
+    b - billion
+    > 2b - large number
+*/
+char* display(long int num){
+    char* str = (char*) malloc(35 * sizeof(char));
+    if (num < 0){
+        strcpy(str, "large number");
+        return str;
+    }
+    if(num / 1000000000.0 > 1){
+        num = num / 1000000000;
+        sprintf(str, "%f", (double) num);
+        strcat(str, "b");
+    }else if(num / 1000000.0 > 1){
+        num = num / 1000000;
+        sprintf(str, "%ld", num);
+        strcat(str, "m");
+    }else if (num / 1000.0 > 1){
+        num = num / 1000;
+        sprintf(str, "%ld", num);
+        strcat(str, "k");
+    }else{
+        sprintf(str, "%ld", num);
+    }
+    return str;
+}
+
+
 /*
     Updates the window title
 */
@@ -94,8 +204,8 @@ void updateTitle(SDL_Window* window, struct Camera camera, float zm,
                                                         unsigned short fps){
     char buffer[90];
     sprintf(buffer,
-        "Camera: [%f, %f], zoom: %f, fps: %hu, Controls: W,A,S,D,Q,E",
-        (float) camera.posX, (float) camera.posY, zm, fps);
+        "Camera: [%f, %f], zoom: %s, fps: %hu, Controls: W,A,S,D,Q,E",
+        (float) camera.posX, (float) camera.posY, display((long int) zm), fps);
 
     SDL_SetWindowTitle(window, buffer);
 }
@@ -111,47 +221,6 @@ double map(long double v, long double a, long double b, long double c,
     return c + (d - c) * ( v / (b - a) - a / (b - a) );
 }
 
-
-/*
-    Calculate the pixels for the mandelbrot set
-*/
-// void update2(SDL_Renderer* renderer, POINT real, POINT imag,
-//                                         float var1, float var2, float var3){
-//     double r, g, b;
-//     complex c, z;
-//     int k;
-//     //#pragma omp parallel for
-//     for (int i = 0 ; i < WINDOW_WIDTH ; ++i){
-//         for (int j = 0 ; j < WINDOW_HEIGHT ; ++j){
-//             //complex c = {(double) i / exp(zoom) - x_offset, (double) j / exp(zoom) - y_offset};
-//             c = (complex) {map(i, 0, WINDOW_WIDTH, real.x, real.y),
-//                           map(j, 0, WINDOW_HEIGHT, imag.x, imag.y)};
-//             z = (complex) {0, 0};
-//             k = 0;
-//             while (k <= MAX_ITER){
-//                 z = cpx_add(cpx_mul(z, z), c);
-//                 if (z.real + z.imag > 17 || z.real + z.imag < -17) break;
-//                 k += 1;
-//             }
-//             k = (int)((double) k / MAX_ITER * 255) % 255;
-//             r = (int)(cos(k) * k + (long double) var1 * k) % 255;
-//             g = (int)(sin(k * k) * k + (long double) var2 * k) % 255;
-//             b = (int)(k * (long double) var3 + sin(k) * k / MAX_ITER) % 255;
-//
-//             SDL_SetRenderDrawColor(renderer, r, g, b, 255);
-//             SDL_RenderDrawPoint(renderer, i, j);
-//         }
-//     }
-// }
-
-void write(uint8_t* ptr, uint8_t r, uint8_t g, uint8_t b){
-    *ptr = r;
-    ptr ++;
-    *ptr = g;
-    ptr ++;
-    *ptr = b;
-    ptr ++;
-}
 
 // typedef struct ThreadData{
 //     uint8_t* ptr;
@@ -169,8 +238,8 @@ void write(uint8_t* ptr, uint8_t r, uint8_t g, uint8_t b){
 //
 // }
 
-void update3(uint8_t* pixels, POINT viewport[2], float vars[3]){
-    int r, g, b;
+void update(uint8_t* pixels, POINT viewport[2], float prime[3]){
+    uint8_t r = 0, g = 0, b = 0;
     complex c, z;
     int k;
     //SDL_Thread* thread;
@@ -184,21 +253,38 @@ void update3(uint8_t* pixels, POINT viewport[2], float vars[3]){
             k = 0;
             while (k <= MAX_ITER){
                 z = cpx_add(cpx_mul(z, z), c);
-                if (z.real + z.imag > 17 || z.real + z.imag < -17) break;
+                if (z.real * z.real + z.imag * z.imag
+                    > BOUNDED_THRESHOLD * BOUNDED_THRESHOLD) break;
+                // if (z.real + z.imag > BOUNDED_THRESHOLD ||
+                //     z.real + z.imag < -BOUNDED_THRESHOLD) break;
                 k += 1;
             }
-            k = (int)((double) k / MAX_ITER * 255) % 255;
-            r = (int)(cos(k) * k + (long double) vars[0] * k) % 255;
 
-            g = (int)(sin(k * k) * k + (long double) vars[1] * k) % 255;
+            #if COLORING == 1
+            calulateColorWithControlPoints(&r, &g, &b, k);
+            #elif COLORING == 2
+            // calculate with prime colors
+            k = (int)((float) k / MAX_ITER * 255) % 256;
+            r = (int)(cos(k) * k + (long double) prime[0] * k) % 255;
+            g = (int)(sin(k * k) * k + (long double) prime[1] * k) % 255;
+            b = (int)(k * (long double) prime[2] + sin(k) * k / MAX_ITER) % 255;
+            #elif COLORING == 3
+            //black and white
+            k = (int)((float) k / MAX_ITER * 255) % 256;
+            r = (uint8_t) k;
+            g = (uint8_t) k;
+            b = (uint8_t) k;
+            #endif
 
-            b = (int)(k * (long double) vars[2] + sin(k) * k / MAX_ITER) % 255;
+            // fancy coloring
+            // k = (int)((float) k / MAX_ITER * 255) % 256;
+            // r = (uint8_t)(k - k * sin(log(z.real / z.imag))) % 256;
+            // g = (uint8_t)(k - k * cos(sqrt(z.real / z.imag))) % 256;
+            // b = (uint8_t)(k - k * sin(log(z.real / z.imag))) % 256;
 
             *pixels++ = r;
             *pixels++ = g;
             *pixels++ = b;
-            //THREAD_DATA td = {pixels, (uint8_t) r, (uint8_t) g, (uint8_t) b};
-            //thread = SDL_CreateThread(write, "thread", &td);
         }
     }
 }
@@ -213,18 +299,46 @@ int main(){
     // Initing SDL
     SDL_Init(SDL_INIT_EVERYTHING);
 
-    SDL_CreateWindowAndRenderer(WINDOW_WIDTH, WINDOW_HEIGHT, 0,
-                                &window, &renderer);
+    // https://wiki.libsdl.org/SDL_CreateWindow
+    const char* title = "Title";
 
-    struct Camera camera = {0.0, 0.0, 0.33};
-    POINT points[2];
-    calculatePerspective(&camera, points);
+    // SDL_WINDOW_FULLSCREEN_DESKTOP
+    window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED,
+                                        SDL_WINDOWPOS_CENTERED,
+                                        WINDOW_WIDTH, WINDOW_HEIGHT,
+                    #if FULLSCREEN == 1
+                    SDL_WINDOW_FULLSCREEN_DESKTOP
+                    #else
+                    0
+                    #endif
+                );
+
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+    //SDL_CreateWindowAndRenderer(WINDOW_WIDTH, WINDOW_HEIGHT, 0,
+    //                            &window, &renderer);
+
+    //SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+
+    struct Camera camera = {0, 0, 0.33};
+    POINT viewport[2];
+    calculatePerspective(&camera, viewport);
 
     srand(time(0));
-    float vars[3];
-    vars[0] = (float)(rand() % 200) / 100.0 + 0.3;
-    vars[1] = (float)(rand() % 200) / 100.0 + 0.5;
-    vars[2] = (float)(rand() % 200) / 100.0 + 0.5;
+    float colors[3];
+    colors[0] = (float)(rand() % 300) / 100.0 + 0.85;
+    colors[1] = (float)(rand() % 300) / 100.0 + 0.85;
+    colors[2] = (float)(rand() % 300) / 100.0 + 0.85;
+
+    /*
+        r=3.410000, g=1.140000, b=2.420000
+        r=2.690000, g=3.480000, b=1.020000
+
+        0.8 - 2.3
+        1.3 - 1.7
+        1.4 - 2.5
+    */
+    printf("r=%f, g=%f, b=%f\n", colors[0], colors[1], colors[2]);
 
     SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24,
                     SDL_TEXTUREACCESS_STREAMING, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -233,21 +347,17 @@ int main(){
                                                 * sizeof(uint8_t) * 3);
     int pitch = sizeof(uint8_t) * 3 * WINDOW_WIDTH;
 
-    // for (unsigned int i = 0 ; i < WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(uint8_t) * 3; i++){
-    //     pixels[i] = 0;
-    // }
-
     //SDL_RenderClear(renderer);
     //update2(renderer, points[0], points[1], var1, var2, var3);
     //SDL_RenderPresent(renderer);
 
-    float defaultZoom = points[0].y - points[0].x;
+    float defaultZoom = viewport[0].y - viewport[0].x;
     float zoomLevel = defaultZoom;
-    float zm = 1.0;
+    float zoomedIn = 1.0;
 
-    clock_t start, stop, delta = 0;
-    unsigned short frames = 0;
-    unsigned short fps = 0;
+    // clock_t start, stop, delta = 0;
+    // unsigned short frames = 0;
+    // unsigned short fps = 0;
 
     // start = clock();
     // update3(pixels, points, vars);
@@ -263,44 +373,39 @@ int main(){
     //
     // return 0;
 
-    updateTitle(window, camera, zm, frames);
+    updateTitle(window, camera, zoomLevel, 0);
 
     // Window loop
     bool running = true;
 
     while(running){
 
-        start = clock();
+        //start = clock();
 
         while(SDL_PollEvent(&event)){
             if (event.type == SDL_KEYDOWN){
                 handleKeys(&event.key, &camera);
-                calculatePerspective(&camera, points);
-                zoomLevel = points[0].y - points[0].x;
-                zm = defaultZoom / zoomLevel;
+                calculatePerspective(&camera, viewport);
+                zoomLevel = viewport[0].y - viewport[0].x;
+                zoomedIn = defaultZoom / zoomLevel;
             }else if(event.type == SDL_QUIT){
                 running = false;
             }
         }
-        update3(pixels, points, vars);
+        update(pixels, viewport, colors);
         SDL_UpdateTexture(texture, NULL, pixels, pitch);
-        SDL_RenderCopy(renderer, texture, NULL, NULL );
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
         SDL_RenderPresent(renderer);
 
-        //SDL_RenderClear(renderer);
-        //update2(renderer, points[0], points[1], var1, var2, var3);
-        //SDL_RenderPresent(renderer);
-
-
-        stop = clock();
-        delta += stop - start;
-        frames ++;
-        if ((delta / (double) CLOCKS_PER_SEC) > 1){
-            printf("[INFO] FPS: %d\n", frames);
-            fps = frames;
-            frames = delta = 0;
-        }
-        updateTitle(window, camera, zm, fps);
+        // stop = clock();
+        // delta += stop - start;
+        // frames ++;
+        // if ((delta / (double) CLOCKS_PER_SEC) > 1){
+        //     printf("[INFO] FPS: %d\n", frames);
+        //     fps = frames;
+        //     frames = delta = 0;
+        // }
+        updateTitle(window, camera, zoomedIn, 0);
     }
 
     SDL_DestroyRenderer(renderer);
