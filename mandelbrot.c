@@ -15,9 +15,9 @@
 
 // ---------------------------------------------------------------------------
 
-#define WINDOW_WIDTH 800
-#define WINDOW_HEIGHT 600
-#define FULLSCREEN 0
+#define WINDOW_WIDTH 2550
+#define WINDOW_HEIGHT 1440
+#define FULLSCREEN 1
 
 // SETS the depth of the fractal; Change as you like.
 #define MAX_ITER 90
